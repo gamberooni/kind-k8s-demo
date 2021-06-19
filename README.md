@@ -125,4 +125,5 @@ psql ......
 kind delete clusters kind-kind
 sudo rm -rf /mnt/nfs-share
 sudo apt uninstall -y nfs-kernel-server
+sudo rm $(which helm)
 ```
