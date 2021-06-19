@@ -1,0 +1,91 @@
+## Bitnami PostgreSQL image version
+## ref: https://hub.docker.com/r/bitnami/postgresql/tags/
+##
+image:
+  registry: docker.io
+  repository: bitnami/postgresql
+  tag: 12.4.0
+  pullPolicy: IfNotPresent
+  debug: false
+
+##
+## Init containers parameters:
+## volumePermissions: Change the owner of the persist volume mountpoint to RunAsUser:fsGroup
+##
+volumePermissions:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: bitnami/minideb
+    tag: buster
+    pullPolicy: Always
+  securityContext:
+    runAsUser: 0
+
+securityContext:
+  enabled: true
+  fsGroup: 1001
+
+containerSecurityContext:
+  enabled: true
+  runAsUser: 1001
+
+serviceAccount:
+  enabled: false
+
+psp:
+  create: false
+
+rbac:
+  create: false
+
+replication:
+  enabled: false
+
+postgresqlPostgresPassword: password
+postgresqlUsername: admin
+postgresqlPassword: password
+postgresqlDatabase: demodb
+
+postgresqlDataDir: /bitnami/postgresql/data
+
+service:
+  type: ClusterIP
+  port: 5432
+
+shmVolume:
+  enabled: true
+  chmod:
+    enabled: true
+
+## PostgreSQL data Persistent Volume Storage Class
+## If defined, storageClassName: <storageClass>
+## If set to "-", storageClassName: "", which disables dynamic provisioning
+## If undefined (the default) or set to null, no storageClassName spec is
+##   set, choosing the default provisioner.  (gp2 on AWS, standard on
+##   GKE, AWS & OpenStack)
+##
+persistence:
+  enabled: true
+  ## A manually managed Persistent Volume and Claim
+  ## If defined, PVC must be created manually before volume will be bound
+  ## The value is evaluated as a template, so, for example, the name can depend on .Release or .Chart
+  ##
+  # existingClaim:
+
+  ## The path the volume will be mounted at, useful when using different
+  ## PostgreSQL images.
+  ##
+  mountPath: /bitnami/postgresql
+
+  storageClass: "retain-sc"
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+
+updateStrategy:
+  type: RollingUpdate
+
+primary:
+  podLabels: 
+    app: postgres

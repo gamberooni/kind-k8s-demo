@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-pv
+spec:
+  storageClassName: retain-sc
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  claimRef:
+    name: postgres-pvc
+  mountOptions:
+    - hard
+    - nfsvers=3
+  nfs:
+    path: /mnt/nfs_share/kind-pvc
+    server: 192.168.0.123
