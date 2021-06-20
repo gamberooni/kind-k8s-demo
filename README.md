@@ -2,7 +2,7 @@
 
 ## Intro
 This is a short demo on some hacky workarounds on two particular [problems](#motivation) that I have faced when I used [KinD](https://kind.sigs.k8s.io/docs/user/quick-start/) for local k8s development. If you are too lazy to read and prefer to see it in action, please skip to installation [steps](#installation-steps). 
-> **__NOTE:__** This demo is meant for Linux-based environment. I am sorry that you will need to do extra work to figure things out if you are using KinD in Windows.
+> **__NOTE:__** This demo assumes that you have some basic knowledge about Kubernetes and how KinD differs from Kubernetes. This demo is also meant for Linux-based environment. I am sorry that you will need to do extra work to figure things out if you are using KinD in Windows.
 
 ## Motivation
 KinD is an amazing tool for local Kubernetes development, but there are a few things that could pose as a hindrance when you are working with it. For example, 
@@ -157,6 +157,8 @@ PGPASSWORD=password psql -U admin -d demodb
 select * from students;
 ```
 
+## Conclusion
+By going through this demo, it helps to understand Kubernetes storage and networking at a slightly lower level (at least for me). I hope that this demo helped you to understand a little more about Kubernetes and KinD :)
 
 ## Cleanup 
 ```
