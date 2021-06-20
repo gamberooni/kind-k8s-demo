@@ -85,6 +85,12 @@ reclaimPolicy: Retain
 volumeBindingMode: WaitForFirstConsumer
 ```
 
+Here's the diagram that can hopefully clear up some confusion.
+<p align="center">
+  <img src="./images/storage-diagram.png" />
+</p>
+
+
 ## Installation Steps
 This demo will use a ports 80 and 6443 so please make sure these ports are available. Before starting the installation, you need to change the IP address to your host's IP address in  `manifests/pv.yaml`. You can get your IP address by running `ifconfig`.
 
