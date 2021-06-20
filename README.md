@@ -2,7 +2,7 @@
 
 ## Intro
 This is a short demo on some hacky workarounds on two particular [problems](#motivation) that I have faced when I used KinD for local k8s development. If you are too lazy to read and prefer to see it in action, please skip to installation [steps](#installation-steps). 
-> **__NOTE:__** This demo is meant for Linux-based environment. I am sorry that you will need to do extra work to figure things out if you are using Windows.
+> **__NOTE:__** This demo is meant for Linux-based environment. I am sorry that you will need to do extra work to figure things out if you are using KinD in Windows.
 
 ## Motivation
 KinD is an amazing tool for local Kubernetes development, but there are a few things that could pose as a hindrance when you are working with it. For example, 
@@ -14,7 +14,7 @@ From the KinD loadbalancer [documentation](https://kind.sigs.k8s.io/docs/user/lo
 
 But what if you want to access the service from another machine? That machine doesn't understand the LoadBalancer's IP address and you won't be able to access that service. One workaround is that you can specify the service type as `NodePort` and assign port number range 30000-32767 (k8s NodePort range). 
 
-Say you have created an `IngressController` with service type `NodePort` and port number 30000 for `http` service. This will then be the kind cluster's container port. You will then have to use KinD's `extraPortMappings` to map theis container port to one of the host's port during the cluster creation. For example, 
+Say you have created an `IngressController` with service type `NodePort` and port number 30000 for `http` service. This will then be the kind cluster's container port. You will then have to use KinD's `extraPortMappings` to map this container port to one of the host's port during the cluster creation. For example, 
 
 ```
 cat <<EOF | kind create cluster --config=-
@@ -40,7 +40,9 @@ You will then be able to access the services exposed by the `IngressController` 
 ## Persist Data Even if KinD is Destroyed
 I personally used KinD for quite a lot of local k8s development on a local Linux VM. I have had some days when I boot up my VM, the KinD cluster just hangs and I can't figure out what's wrong. I would then have to destroy the cluster and spin up a new one, but all the data would be gone, which might be undesirable sometimes. 
 
-I referenced from this [post](https://mauilion.dev/posts/kind-pvc/) for the hacky workaround. It takes some time to understand and set up, but it can save you a lot of time to recreate the data that you lose everytime you recreate the cluster. KinD uses Rancher's [local-path-provisioner](https://github.com/rancher/local-path-provisioner) as the default storage class out-of-the-box, and it mounts to the cluster's `/var/local-path-provisioner` directory. We will leverage this information and provision a local NFS service, then create `extraMounts` that maps the NFS's mount path during the cluster creation. 
+I referenced from this [post](https://mauilion.dev/posts/kind-pvc/) for the hacky workaround. It takes some time to understand and set up, but it can save you a lot of time to recreate the data that you lose everytime you recreate the cluster. 
+
+KinD uses Rancher's [local-path-provisioner](https://github.com/rancher/local-path-provisioner) as the default storage class out-of-the-box, and it mounts to the cluster's `/var/local-path-provisioner` directory. We will leverage this information and provision a local NFS service, then create `extraMounts` that maps the NFS's mount path during the cluster creation. 
 
 ```
 cat <<EOF | kind create cluster --config=-
@@ -57,8 +59,7 @@ nodes:
 We will also have to install NFS service on the VM. 
 
 ```
-sudo apt update
-sudo apt install nfs-kernel-server jq -y
+sudo apt update && sudo apt install nfs-kernel-server jq -y
 sudo mkdir -p /mnt/nfs_share/kind-pvc
 sudo chown -R nobody:nogroup /mnt/nfs_share/
 sudo chmod -R 777 /mnt/nfs_share/
@@ -66,18 +67,14 @@ IPs=$(kubectl get nodes -o json | jq '.items[].status.addresses[] | select(.type
 IP_ARRAY=($IPs)
 INTERNAL_IP=`echo ${IP_ARRAY[0]} | tr -d '"'`
 SUBNET="${INTERNAL_IP%.*}"
-if grep -q "/mnt/nfs_share ${SUBNET}.0/24(rw,sync,no_subtree_check)" /etc/exports
-then
-  echo "NFS configuration to allow Docker containers to use NFS server already exists. Skipping..."
-else
-  echo "Adding NFS configuration to allow Docker containers to use NFS server"
-  echo "/mnt/nfs_share ${SUBNET}.0/24(rw,sync,no_subtree_check)" | sudo tee -a /etc/exports > /dev/null
-  sudo exportfs -a
-  sudo systemctl restart nfs-kernel-server
-fi
+sudo sed -i '/^\/mnt\/nfs_share/d' /etc/exports
+echo "Adding NFS configuration to allow Docker containers to use NFS server"
+echo "/mnt/nfs_share ${SUBNET}.0/24(rw,sync,no_subtree_check)" | sudo tee -a /etc/exports > /dev/null
+sudo exportfs -a
+sudo systemctl restart nfs-kernel-server
 ```
 
-We will also have to create a new storage class with Retain `reclaimPolicy`.
+We will also have to create a new storage class with Retain `reclaimPolicy` so that when the pod is destroyed, the PersistentVolumeClaim won't be deleted as well.
 
 ```
 apiVersion: storage.k8s.io/v1
@@ -100,7 +97,7 @@ Run the commands below **from the project root directory** to perform the instal
 kubectl apply -f manifests/
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm repo update
-helm install postgres bitnami/postgresql -f manifests/postgres.yaml --set persistence.existingClaim=postgres-pv
+helm install postgres bitnami/postgresql -f helm/postgres.yaml --set persistence.existingClaim=postgres-pvc
 ```
 The manifest files will create a the following:
 1. Nginx deployment and service
@@ -115,14 +112,28 @@ After the installation is completed, you should be able to visit `http://<IP_add
 To demonstrate that the data is persisted even if the KinD cluster is destroyed, we will use the newly created Postgres database. We will used `kubectl exec -it` (interactive mode) and use `psql` to run queries on the Postgres database. 
 
 ```
-kubectl exec -it postgres-postgresql -- /bin/bash
-psql ......
+kubectl exec -it postgres-postgresql-0 -- /bin/bash
+psql -d demodb -U admin -W
+create table students (id serial, name varchar(50), age smallint, degree varchar(50));
+insert into students (name, age, degree) values ('Alex', 18, 'Engineering');
+insert into students (name, age, degree) values ('Bob', 20, 'Economics');
+insert into students (name, age, degree) values ('Cathy', 19, 'Psychology');
+select * from students;
+exit
+exit
+kind delete clusters kind
+. scripts/create-cluster.sh
+kubectl apply -f manifests/
+helm install postgres bitnami/postgresql -f manifests/postgres.yaml --set persistence.existingClaim=postgres-pvc
+kubectl exec -it postgres-postgresql-0 -- /bin/bash
+psql -d demodb -U admin -W
+select * from students;
 ```
 
 
 ## Cleanup 
 ```
-kind delete clusters kind-kind
+kind delete clusters kind
 sudo rm -rf /mnt/nfs-share
 sudo apt uninstall -y nfs-kernel-server
 sudo rm $(which helm)

@@ -9,12 +9,8 @@ IPs=$(kubectl get nodes -o json | jq '.items[].status.addresses[] | select(.type
 IP_ARRAY=($IPs)
 INTERNAL_IP=`echo ${IP_ARRAY[0]} | tr -d '"'`
 SUBNET="${INTERNAL_IP%.*}"
-if grep -q "/mnt/nfs_share ${SUBNET}.0/24(rw,sync,no_subtree_check)" /etc/exports
-then
-  echo "NFS configuration to allow Docker containers to use NFS server already exists. Skipping..."
-else
-  echo "Adding NFS configuration to allow Docker containers to use NFS server"
-  echo "/mnt/nfs_share ${SUBNET}.0/24(rw,sync,no_subtree_check)" | sudo tee -a /etc/exports > /dev/null
-  sudo exportfs -a
-  sudo systemctl restart nfs-kernel-server
-fi
+sudo sed -i '/^\/mnt\/nfs_share/d' /etc/exports
+echo "Adding NFS configuration to allow Docker containers to use NFS server"
+echo "/mnt/nfs_share ${SUBNET}.0/24(rw,sync,no_subtree_check)" | sudo tee -a /etc/exports > /dev/null
+sudo exportfs -a
+sudo systemctl restart nfs-kernel-server

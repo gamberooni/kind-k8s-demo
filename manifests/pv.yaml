@@ -10,9 +10,10 @@ spec:
     - ReadWriteOnce
   claimRef:
     name: postgres-pvc
+    namespace: default
   mountOptions:
     - hard
     - nfsvers=3
   nfs:
-    path: /mnt/nfs_share/kind-pvc
-    server: 192.168.0.123
+    path: /mnt/nfs_share/kind-pvc/postgres
+    server: 192.168.0.158

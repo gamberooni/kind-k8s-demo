@@ -10,6 +10,9 @@ networking:
   kubeProxyMode: "ipvs"
 nodes:
 - role: control-plane
+  extraMounts:
+  - hostPath: /mnt/nfs_share/kind-pvc
+    containerPath: /var/local-path-provisioner
   extraPortMappings:
   - containerPort: 30000 
     hostPort: 80
