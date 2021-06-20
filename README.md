@@ -1,7 +1,7 @@
 # Kubernetes in Docker (KinD) Demo
 
 ## Intro
-This is a short demo on some hacky workarounds on two particular [problems](#motivation) that I have faced when I used KinD for local k8s development. If you are too lazy to read and prefer to see it in action, please skip to installation [steps](#installation-steps). 
+This is a short demo on some hacky workarounds on two particular [problems](#motivation) that I have faced when I used [KinD](https://kind.sigs.k8s.io/docs/user/quick-start/) for local k8s development. If you are too lazy to read and prefer to see it in action, please skip to installation [steps](#installation-steps). 
 > **__NOTE:__** This demo is meant for Linux-based environment. I am sorry that you will need to do extra work to figure things out if you are using KinD in Windows.
 
 ## Motivation
@@ -12,9 +12,11 @@ KinD is an amazing tool for local Kubernetes development, but there are a few th
 ## Exposing a Service to Non-local Machines
 From the KinD loadbalancer [documentation](https://kind.sigs.k8s.io/docs/user/loadbalancer/), we know that we can expose a service by creating a layer 2 load balancer within the kind Docker network subnet. You can then expose a service with a `LoadBalancer` type, and MetalLB will assign an IP to it. You can then access the exposed service through the LoadBalancer's IP address locally. 
 
-But what if you want to access the service from another machine? That machine doesn't understand the LoadBalancer's IP address and you won't be able to access that service. One workaround is that you can specify the service type as `NodePort` and assign port number range 30000-32767 (k8s NodePort range). 
+But what if you want to access the service from another machine? That machine doesn't understand the LoadBalancer's IP address that is in the kind Docker subnet so you won't be able to access that service. 
 
-Say you have created an `IngressController` with service type `NodePort` and port number 30000 for `http` service. This will then be the kind cluster's container port. You will then have to use KinD's `extraPortMappings` to map this container port to one of the host's port during the cluster creation. For example, 
+One workaround is that you can specify the service type as `NodePort` and assign port number range 30000-32767 (k8s NodePort range). 
+
+Say you have created an `IngressController` with service type `NodePort` and port number 30000 for `http` service. This will then be the kind cluster's container port. You will then have to use KinD's `extraPortMappings` to map this container port to one of the host's port **during the cluster creation**. For example, 
 
 ```
 cat <<EOF | kind create cluster --config=-
@@ -22,12 +24,6 @@ kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
 - role: control-plane
-  kubeadmConfigPatches:
-  - |
-    kind: InitConfiguration
-    nodeRegistration:
-      kubeletExtraArgs:
-        node-labels: "ingress-ready=true"
   extraPortMappings:
   - containerPort: 30000
     hostPort: 80
@@ -35,7 +31,7 @@ nodes:
 EOF
 ```
 
-You will then be able to access the services exposed by the `IngressController` via `http://<IP_address_of_kind_cluster_machine>`.
+You will then be able to access the services exposed by the `IngressController` via `http://<IP_address_of_kind_cluster_machine>` from any device/machine within the same subnet.
 
 ## Persist Data Even if KinD is Destroyed
 I personally used KinD for quite a lot of local k8s development on a local Linux VM. I have had some days when I boot up my VM, the KinD cluster just hangs and I can't figure out what's wrong. I would then have to destroy the cluster and spin up a new one, but all the data would be gone, which might be undesirable sometimes. 
@@ -50,6 +46,9 @@ kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
 - role: control-plane
+  extraMounts:
+  - hostPath: /mnt/nfs_share/kind-pvc
+    containerPath: /var/local-path-provisioner
 - role: worker
   extraMounts:
   - hostPath: /mnt/nfs_share/kind-pvc
@@ -74,7 +73,7 @@ sudo exportfs -a
 sudo systemctl restart nfs-kernel-server
 ```
 
-We will also have to create a new storage class with Retain `reclaimPolicy` so that when the pod is destroyed, the PersistentVolumeClaim won't be deleted as well.
+We will also have to create a new storage class with Retain `reclaimPolicy` using the Rancher storage provisioner so that when the pod is destroyed, the `PersistentVolumeClaim` won't be deleted as well.
 
 ```
 apiVersion: storage.k8s.io/v1
@@ -107,18 +106,24 @@ The manifest files will create a the following:
 5. StorageClass with Retain policy
 6. PersistentVolume and PersistentVolumeClaim using the newly created StorageClass
 
+### Verify that the Service works
 After the installation is completed, you should be able to visit `http://<IP_address_of_kind_cluster_machine>` and you should land on the `Nginx` default page. You should be able to access the Nginx webpage using any other machines/devices that are connected to the same subnet as your KinD cluster (for example, your KinD cluster is running on your laptop, and you access the Nginx webpage using an iPad, but make sure both are connected to the **same** WiFi).
 
+### Verify that the Data is Persisted
 To demonstrate that the data is persisted even if the KinD cluster is destroyed, we will use the newly created Postgres database. We will used `kubectl exec -it` (interactive mode) and use `psql` to run queries on the Postgres database. 
 
 ```
 kubectl exec -it postgres-postgresql-0 -- /bin/bash
-psql -d demodb -U admin -W
+PGPASSWORD=password psql -U admin -d demodb
 create table students (id serial, name varchar(50), age smallint, degree varchar(50));
 insert into students (name, age, degree) values ('Alex', 18, 'Engineering');
 insert into students (name, age, degree) values ('Bob', 20, 'Economics');
 insert into students (name, age, degree) values ('Cathy', 19, 'Psychology');
 select * from students;
+```
+
+Exit the psql client and the tty session. Then recreate the cluster and query the database again to verify that the data is persisted.
+```
 exit
 exit
 kind delete clusters kind
@@ -126,7 +131,7 @@ kind delete clusters kind
 kubectl apply -f manifests/
 helm install postgres bitnami/postgresql -f manifests/postgres.yaml --set persistence.existingClaim=postgres-pvc
 kubectl exec -it postgres-postgresql-0 -- /bin/bash
-psql -d demodb -U admin -W
+PGPASSWORD=password psql -U admin -d demodb
 select * from students;
 ```
 
@@ -136,5 +141,10 @@ select * from students;
 kind delete clusters kind
 sudo rm -rf /mnt/nfs-share
 sudo apt uninstall -y nfs-kernel-server
+```
+Optional cleanups
+```
+sudo rm $(which kind)
 sudo rm $(which helm)
+sudo rm $(which kubectl)
 ```
