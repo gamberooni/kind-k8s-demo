@@ -107,11 +107,23 @@ The manifest files will create a the following:
 6. PersistentVolume and PersistentVolumeClaim using the newly created StorageClass
 
 ### Verify that the Service works
-After the installation is completed, you should be able to visit `http://<IP_address_of_kind_cluster_machine>` and you should land on the `Nginx` default page. You should be able to access the Nginx webpage using any other machines/devices that are connected to the same subnet as your KinD cluster (for example, your KinD cluster is running on your laptop, and you access the Nginx webpage using an iPad, but make sure both are connected to the **same** WiFi).
+After the installation is completed, you can do `kubectl get svc -n haproxy-controller` to verify that the service has type `NodePort`, and container port 80 is forwarded to node port 30000.
+<p align="center">
+  <img src="./images/haproxy.png" />
+</p>
+
+you should be able to visit `http://<IP_address_of_kind_cluster_machine>` and you should land on the `Nginx` default page. You should be able to access the Nginx webpage using any other machines/devices that are connected to the same subnet as your KinD cluster (for example, your KinD cluster is running on your laptop, and you access the Nginx webpage using an iPad, but make sure both are connected to the **same** WiFi).
+<p align="center">
+  <img src="./images/nginx.png" />
+</p>
 
 ### Verify that the Data is Persisted
-To demonstrate that the data is persisted even if the KinD cluster is destroyed, we will use the newly created Postgres database. We will used `kubectl exec -it` (interactive mode) and use `psql` to run queries on the Postgres database. 
+To demonstrate that the data is persisted even if the KinD cluster is destroyed, we will use the newly created Postgres database. We can also verify that the `PersistentVolume`, `PersistentVolumeClaim` and `StorageClass` are correctly created. 
+<p align="center">
+  <img src="./images/storage.png" />
+</p>
 
+We will use `kubectl exec -it` (interactive mode) and use `psql` to run queries on the Postgres database. 
 ```
 kubectl exec -it postgres-postgresql-0 -- /bin/bash
 PGPASSWORD=password psql -U admin -d demodb
@@ -121,6 +133,10 @@ insert into students (name, age, degree) values ('Bob', 20, 'Economics');
 insert into students (name, age, degree) values ('Cathy', 19, 'Psychology');
 select * from students;
 ```
+Your `students` table should look like the following.
+<p align="center">
+  <img src="./images/db.png" />
+</p>
 
 Exit the psql client and the tty session. Then recreate the cluster and query the database again to verify that the data is persisted.
 ```
